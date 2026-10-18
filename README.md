@@ -97,3 +97,41 @@ See [SECURITY.md](SECURITY.md).
 ## Support
 
 **[GitHub Sponsors](https://github.com/sponsors/dhe-cruzer69)**
+
+## APEX Architecture Map
+
+> Status: architecture documentation; implementation and deployment claims require independent verification.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Client as MCP client
+  participant Transport
+  participant Parser as Protocol parser
+  participant Auth as Identity and scope
+  participant Gate as Policy gate
+  participant Tool as Tool adapter
+  participant Audit as Audit sink
+  Client->>Transport: Connect using configured transport
+  Transport->>Parser: Deliver framed message
+  Parser->>Parser: Validate envelope and method
+  alt malformed message
+    Parser-->>Transport: Protocol error
+  else valid request
+    Parser->>Auth: Resolve caller identity
+    Auth-->>Gate: Identity + scopes
+    Gate->>Gate: Check method, tool, and arguments
+    alt denied
+      Gate->>Audit: Record denial metadata
+      Gate-->>Transport: Permission error
+    else allowed
+      Gate->>Tool: Invoke bounded tool call
+      Tool-->>Gate: Result or typed error
+      Gate->>Audit: Record outcome metadata
+      Gate-->>Transport: Normalized response
+    end
+  end
+  Transport-->>Client: Protocol response
+```
+**Evidence note:** Transport support, authentication, scope enforcement, argument validation, and audit behavior must be confirmed from the actual gateway implementation.
+
