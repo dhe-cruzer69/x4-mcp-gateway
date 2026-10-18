@@ -32,6 +32,38 @@ Policy Engine + Risk Engine
 Tool Invocation → Result Filter → Audit Log
 ```
 
+<!-- X4-APEX-DIAGRAM-START:x4-mcp-gateway -->
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as MCP Client
+    participant R as Registry and Discovery
+    participant A as Authentication
+    participant S as Schema Validator
+    participant P as Policy and Risk Engine
+    participant H as Human Approval
+    participant T as Backend Tool
+    participant L as Audit Log
+    C->>R: Discover configured tools
+    C->>A: Request tool invocation
+    A-->>S: Identity and scope
+    S->>S: Validate request schema
+    S->>P: Validated request
+    P-->>L: Record decision
+    alt denied
+        P-->>C: Deny
+    else approval required
+        P->>H: Request approval
+        H-->>P: Decision
+    end
+    P->>T: Invoke only if allowed
+    T-->>C: Filtered result
+    T-->>L: Invocation evidence
+```
+
+<!-- X4-APEX-DIAGRAM-END:x4-mcp-gateway -->
+
 ## Example policy
 
 ```yaml
