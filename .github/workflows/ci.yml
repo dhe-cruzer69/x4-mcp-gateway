@@ -1,17 +1,32 @@
 name: CI
+
 on:
   push:
     branches: [main]
   pull_request:
+
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5.0.0
         with:
           python-version: "3.12"
-      - run: pip install ruff pytest
-      - run: ruff check . || true
+
+      - name: Install tools
+        run: pip install ruff pytest
+
+      - name: Lint (fail-closed)
+        run: ruff check .
+
+      - name: Test (fail-closed)
+        run: pytest -q
