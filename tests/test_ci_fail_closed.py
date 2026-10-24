@@ -18,11 +18,11 @@ QUALITY_COMMAND_PATTERNS = {
 
 
 def _enabled(value: object) -> bool:
-    if value is None or value is False:
-        return False
-    if isinstance(value, str) and value.strip().lower() == "false":
-        return False
-    return True
+    return not (
+        value is None
+        or value is False
+        or (isinstance(value, str) and value.strip().lower() == "false")
+    )
 
 
 def _load_workflow() -> dict[str, Any]:
