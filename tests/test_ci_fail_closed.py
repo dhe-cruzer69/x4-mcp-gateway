@@ -1,5 +1,6 @@
 """Regression tests for a fail-closed GitHub Actions quality workflow."""
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -10,12 +11,18 @@ ALLOWED_QUALITY_COMMANDS = {
     "lint": {"ruff check .", "python -m ruff check ."},
     "test": {"pytest -q", "python -m pytest -q"},
 }
+QUALITY_COMMAND_PATTERNS = {
+    "lint": re.compile(r"(?:^|(?:&&|;)\\s*)(?:python\\s+-m\\s+)?ruff\\s+check(?:\\s|$)"),
+    "test": re.compile(r"(?:^|(?:&&|;)\\s*)(?:python\\s+-m\\s+)?pytest(?:\\s|$)"),
+}
 
 
 def _enabled(value: object) -> bool:
-    return value is True or (
-        isinstance(value, str) and value.strip().lower() == "true"
-    )
+    if value is None or value is False:
+        return False
+    if isinstance(value, str) and value.strip().lower() == "false":
+        return False
+    return True
 
 
 def _load_workflow() -> dict[str, Any]:
@@ -53,36 +60,37 @@ def test_quality_commands_are_executable_steps_and_fail_closed() -> None:
             assert "||" not in run, (
                 f"jobs.{job_name}.steps[{index}] must not mask shell failures"
             )
-            command = " ".join(run.split())
-            for gate_name, allowed_commands in ALLOWED_QUALITY_COMMANDS.items():
-                marker = "ruff check" if gate_name == "lint" else "pytest"
-                if marker not in command:
+            for raw_line in run.splitlines():
+                command = " ".join(raw_line.split())
+                if not command:
                     continue
-                assert command in allowed_commands, (
-                    f"{gate_name} must run as a standalone fail-closed command; "
-                    f"found {command!r}"
-                )
-                condition = str(step.get("if") or "").strip().lower()
-                job_condition = str(job.get("if") or "").strip().lower()
-                allowed_conditions = {"", "success()", "${{ success() }}"}
-                assert condition in allowed_conditions, (
-                    f"{gate_name} step has a condition that can skip the gate: "
-                    f"{condition!r}"
-                )
-                assert job_condition in allowed_conditions, (
-                    f"job {job_name} has a condition that can skip {gate_name}: "
-                    f"{job_condition!r}"
-                )
-                observed[gate_name].append(job_name)
-                quality_jobs.add(job_name)
+                for gate_name, pattern in QUALITY_COMMAND_PATTERNS.items():
+                    if not pattern.search(command):
+                        continue
+                    assert command in ALLOWED_QUALITY_COMMANDS[gate_name], (
+                        f"{gate_name} must run as a standalone fail-closed command; "
+                        f"found {command!r}"
+                    )
+                    allowed_conditions = {"", "success()", "${{ success() }}"}
+                    step_condition = str(step.get("if") or "").strip().lower()
+                    job_condition = str(job.get("if") or "").strip().lower()
+                    assert step_condition in allowed_conditions, (
+                        f"{gate_name} step has a condition that can skip the gate: "
+                        f"{step_condition!r}"
+                    )
+                    assert job_condition in allowed_conditions, (
+                        f"job {job_name} has a condition that can skip {gate_name}: "
+                        f"{job_condition!r}"
+                    )
+                    observed[gate_name].append(job_name)
+                    quality_jobs.add(job_name)
 
     for gate_name, job_names in observed.items():
         assert len(job_names) == 1, (
             f"expected exactly one executable {gate_name} command; found {job_names}"
         )
 
-    # If a separate final gate is introduced, it must depend on every job that
-    # performs required lint/test checks, and the final gate itself cannot fail open.
+    # The final gate must include every job that runs required quality checks.
     gate = jobs.get("gate")
     if isinstance(gate, dict):
         assert not _enabled(gate.get("continue-on-error")), (
