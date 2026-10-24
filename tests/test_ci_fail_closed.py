@@ -12,8 +12,8 @@ ALLOWED_QUALITY_COMMANDS = {
     "test": {"pytest -q", "python -m pytest -q"},
 }
 QUALITY_COMMAND_PATTERNS = {
-    "lint": re.compile(r"(?:^|(?:&&|;)\\s*)(?:python\\s+-m\\s+)?ruff\\s+check(?:\\s|$)"),
-    "test": re.compile(r"(?:^|(?:&&|;)\\s*)(?:python\\s+-m\\s+)?pytest(?:\\s|$)"),
+    "lint": re.compile(r"(?:^|(?:&&|;)\s*)(?:python\s+-m\s+)?ruff\s+check(?:\s|$)"),
+    "test": re.compile(r"(?:^|(?:&&|;)\s*)(?:python\s+-m\s+)?pytest(?:\s|$)"),
 }
 
 
@@ -90,7 +90,8 @@ def test_quality_commands_are_executable_steps_and_fail_closed() -> None:
             f"expected exactly one executable {gate_name} command; found {job_names}"
         )
 
-    # The final gate must include every job that runs required quality checks.
+    # If a separate final gate is introduced, it must depend on every required
+    # lint/test job, and the final gate itself cannot suppress failures.
     gate = jobs.get("gate")
     if isinstance(gate, dict):
         assert not _enabled(gate.get("continue-on-error")), (
