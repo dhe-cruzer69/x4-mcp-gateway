@@ -36,10 +36,26 @@ def _condition(config: dict[str, Any]) -> str:
     return "" if value is None else str(value).strip().lower()
 
 
+def test_required_quality_check_name_is_stable() -> None:
+    workflow = _load_workflow()
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict), "CI workflow must define a jobs mapping"
+    quality = jobs.get("quality")
+    assert isinstance(quality, dict), "required jobs.quality check must be preserved"
+    assert quality.get("name") in {None, "quality"}, (
+        "jobs.quality must not override the established quality check name"
+    )
+    strategy = quality.get("strategy")
+    assert not (isinstance(strategy, dict) and "matrix" in strategy), (
+        "matrix dimensions suffix the check name and may break required-check matching"
+    )
+
+
 def test_quality_commands_are_executable_steps_and_fail_closed() -> None:
     workflow = _load_workflow()
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict) and jobs, "CI must define at least one job"
+    assert isinstance(jobs.get("quality"), dict), "jobs.quality must exist"
 
     observed: dict[str, list[str]] = {"lint": [], "test": []}
     quality_jobs: set[str] = set()
@@ -91,12 +107,11 @@ def test_quality_commands_are_executable_steps_and_fail_closed() -> None:
                     quality_jobs.add(job_name)
 
     for gate_name, job_names in observed.items():
-        assert len(job_names) == 1, (
-            f"expected exactly one executable {gate_name} command; found {job_names}"
+        assert job_names == ["quality"], (
+            f"expected exactly one executable {gate_name} command under jobs.quality; "
+            f"found {job_names}"
         )
 
-    # If a separate final gate is introduced, it must depend on every required
-    # lint/test job, and the final gate itself cannot suppress failures.
     gate = jobs.get("gate")
     if isinstance(gate, dict):
         assert not _enabled(gate.get("continue-on-error")), (
